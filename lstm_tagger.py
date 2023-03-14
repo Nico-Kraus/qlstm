@@ -8,7 +8,7 @@ class LSTMTagger(nn.Module):
         self,
         embedding_dim,
         hidden_dim,
-        vocab_size,
+        input_size,
         tagset_size,
         n_qubits=0,
         backend="default.qubit",
@@ -16,7 +16,7 @@ class LSTMTagger(nn.Module):
         super(LSTMTagger, self).__init__()
         self.hidden_dim = hidden_dim
 
-        self.word_embeddings = nn.Embedding(vocab_size, embedding_dim)
+        self.embeddings = nn.Embedding(input_size, embedding_dim)
 
         # The LSTM takes word embeddings as inputs, and outputs hidden states
         # with dimensionality hidden_dim.
@@ -33,7 +33,7 @@ class LSTMTagger(nn.Module):
         self.hidden2tag = nn.Linear(hidden_dim, tagset_size)
 
     def forward(self, input):
-        embeds = self.word_embeddings(input)
+        embeds = self.embeddings(input)
         lstm_out, _ = self.lstm(embeds.view(len(input), 1, -1))
         tag_logits = self.hidden2tag(lstm_out.view(len(input), -1))
         tag_scores = F.log_softmax(tag_logits, dim=1)

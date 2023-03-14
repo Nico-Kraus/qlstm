@@ -39,7 +39,7 @@ if __name__ == "__main__":
     model = LSTMTagger(
         args.embedding_dim,
         args.hidden_dim,
-        vocab_size=max(data) + 1,
+        input_size=max(data) + 1,
         tagset_size=max(data) + 1,
         n_qubits=args.n_qubits,
         backend=args.backend,
