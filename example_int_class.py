@@ -22,7 +22,7 @@ if __name__ == "__main__":
     parser.add_argument("-E", "--embedding_dim", default=8, type=int)
     parser.add_argument("-H", "--hidden_dim", default=6, type=int)
     parser.add_argument("-Q", "--n_qubits", default=4, type=int)
-    parser.add_argument("-e", "--n_epochs", default=300, type=int)
+    parser.add_argument("-e", "--n_epochs", default=100, type=int)
     parser.add_argument("-B", "--backend", default="default.qubit")
     args = parser.parse_args()
 
@@ -87,14 +87,16 @@ if __name__ == "__main__":
 
     # See what the scores are after training
     with torch.no_grad():
-        inputs = torch.tensor([1, 2, 3, 1, 2], dtype=torch.long)
-        labels = torch.tensor([2, 3, 1, 2, 3], dtype=torch.long)
-        tag_scores = model(inputs)
+        for x_val, y_val in training_data:
 
-        tag_ids = torch.argmax(tag_scores, dim=1).numpy()
-        print(f"Sentence:  {inputs}")
-        print(f"Labels:    {labels}")
-        print(f"Predicted: {tag_ids}")
+            tag_scores = model(torch.tensor(x_val, dtype=torch.long))
+            tag_ids = torch.argmax(tag_scores, dim=1).numpy()
+
+            pred = tag_ids.flatten().tolist()[-1]
+
+            print(f"Sentence:  {x_val}")
+            print(f"Labels:    {y_val[-1]}")
+            print(f"Predicted: {pred}")
 
     lstm_choice = "classical" if args.n_qubits == 0 else "quantum"
 
