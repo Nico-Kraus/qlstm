@@ -10,73 +10,15 @@ import torch.nn as nn
 import torch.nn.functional as F
 import torch.optim as optim
 
-from qlstm_pennylane import QLSTM
+from lstm_tagger import LSTMTagger
 
 from matplotlib import pyplot as plt
 
-tag_to_ix = {"DET": 0, "NN": 1, "V": 2}  # Assign each tag with a unique index
-ix_to_tag = {i: k for k, i in tag_to_ix.items()}
-
-
-def prepare_sequence(seq, to_ix):
-    idxs = [to_ix[w] for w in seq]
-    return torch.tensor(idxs, dtype=torch.long)
-
-
-training_data = [
-    # Tags are: DET - determiner; NN - noun; V - verb
-    # For example, the word "The" is a determiner
-    ("The dog ate the apple".split(), ["DET", "NN", "V", "DET", "NN"]),
-    ("Everybody read that book".split(), ["NN", "V", "DET", "NN"]),
-]
-word_to_ix = {}
-
-# For each words-list (sentence) and tags-list in each tuple of training_data
-for sent, tags in training_data:
-    for word in sent:
-        if word not in word_to_ix:  # word has not been assigned an index yet
-            word_to_ix[word] = len(word_to_ix)  # Assign each word with a unique index
-
-print(f"Vocabulary: {word_to_ix}")
-print(f"Entities: {ix_to_tag}")
-
-
-class LSTMTagger(nn.Module):
-    def __init__(
-        self,
-        embedding_dim,
-        hidden_dim,
-        vocab_size,
-        tagset_size,
-        n_qubits=0,
-        backend="default.qubit",
-    ):
-        super(LSTMTagger, self).__init__()
-        self.hidden_dim = hidden_dim
-
-        self.word_embeddings = nn.Embedding(vocab_size, embedding_dim)
-
-        # The LSTM takes word embeddings as inputs, and outputs hidden states
-        # with dimensionality hidden_dim.
-        if n_qubits > 0:
-            print(f"Tagger will use Quantum LSTM running on backend {backend}")
-            self.lstm = QLSTM(
-                embedding_dim, hidden_dim, n_qubits=n_qubits, backend=backend
-            )
-        else:
-            print("Tagger will use Classical LSTM")
-            self.lstm = nn.LSTM(embedding_dim, hidden_dim)
-
-        # The linear layer that maps from hidden state space to tag space
-        self.hidden2tag = nn.Linear(hidden_dim, tagset_size)
-
-    def forward(self, sentence):
-        embeds = self.word_embeddings(sentence)
-        lstm_out, _ = self.lstm(embeds.view(len(sentence), 1, -1))
-        tag_logits = self.hidden2tag(lstm_out.view(len(sentence), -1))
-        tag_scores = F.log_softmax(tag_logits, dim=1)
-        return tag_scores
-
+data = [1, 2, 3, 1, 2, 3, 1, 2, 3]
+training_data = []
+lookback = 3
+for i in range(len(data) - lookback):
+    training_data.append([data[i : i + lookback], data[i + 1 : i + lookback + 1]])
 
 if __name__ == "__main__":
     # These will usually be more like 32 or 64 dimensional.
@@ -84,7 +26,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser("QLSTM Example")
     parser.add_argument("-E", "--embedding_dim", default=8, type=int)
     parser.add_argument("-H", "--hidden_dim", default=6, type=int)
-    parser.add_argument("-Q", "--n_qubits", default=2, type=int)
+    parser.add_argument("-Q", "--n_qubits", default=0, type=int)
     parser.add_argument("-e", "--n_epochs", default=300, type=int)
     parser.add_argument("-B", "--backend", default="default.qubit")
     args = parser.parse_args()
@@ -97,8 +39,8 @@ if __name__ == "__main__":
     model = LSTMTagger(
         args.embedding_dim,
         args.hidden_dim,
-        vocab_size=len(word_to_ix),
-        tagset_size=len(tag_to_ix),
+        vocab_size=max(data) + 1,
+        tagset_size=max(data) + 1,
         n_qubits=args.n_qubits,
         backend=args.backend,
     )
@@ -111,21 +53,18 @@ if __name__ == "__main__":
         losses = []
         preds = []
         targets = []
-        for sentence, tags in training_data:
+        for x_val, y_val in training_data:
             # Step 1. Remember that Pytorch accumulates gradients.
             # We need to clear them out before each instance
             model.zero_grad()
 
             # Step 2. Get our inputs ready for the network, that is, turn them into
             # Tensors of word indices.
-            sentence_in = prepare_sequence(sentence, word_to_ix)
-            labels = prepare_sequence(tags, tag_to_ix)
-            print(sentence_in)
-            print(labels)
+            input = torch.tensor(x_val, dtype=torch.long)
+            labels = torch.tensor(y_val, dtype=torch.long)
 
             # Step 3. Run our forward pass.
-            tag_scores = model(sentence_in)
-            print(tag_scores)
+            tag_scores = model(input)
 
             # Step 4. Compute the loss, gradients, and update the parameters by
             #  calling optimizer.step()
@@ -153,16 +92,14 @@ if __name__ == "__main__":
 
     # See what the scores are after training
     with torch.no_grad():
-        input_sentence = training_data[0][0]
-        labels = training_data[0][1]
-        inputs = prepare_sequence(input_sentence, word_to_ix)
+        inputs = torch.tensor([1, 2, 3, 1, 2], dtype=torch.long)
+        labels = torch.tensor([2, 3, 1, 2, 3], dtype=torch.long)
         tag_scores = model(inputs)
 
         tag_ids = torch.argmax(tag_scores, dim=1).numpy()
-        tag_labels = [ix_to_tag[k] for k in tag_ids]
-        print(f"Sentence:  {input_sentence}")
+        print(f"Sentence:  {inputs}")
         print(f"Labels:    {labels}")
-        print(f"Predicted: {tag_labels}")
+        print(f"Predicted: {tag_ids}")
 
     lstm_choice = "classical" if args.n_qubits == 0 else "quantum"
 
