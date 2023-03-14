@@ -15,6 +15,7 @@ class LSTMTagger(nn.Module):
     ):
         super(LSTMTagger, self).__init__()
         self.hidden_dim = hidden_dim
+        self.tagset_size = tagset_size
 
         self.embeddings = nn.Embedding(input_size, embedding_dim)
 
@@ -34,7 +35,8 @@ class LSTMTagger(nn.Module):
 
     def forward(self, input):
         embeds = self.embeddings(input)
-        lstm_out, _ = self.lstm(embeds.view(len(input), 1, -1))
-        tag_logits = self.hidden2tag(lstm_out.view(len(input), -1))
-        tag_scores = F.log_softmax(tag_logits, dim=1)
-        return tag_scores
+        out, _ = self.lstm(embeds.view(len(input), 1, -1))
+        out = self.hidden2tag(out.view(len(input), -1))
+        if self.tagset_size > 1:
+            out = F.log_softmax(out, dim=1)
+        return out
